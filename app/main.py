@@ -10,10 +10,11 @@ from contextlib import asynccontextmanager
 import structlog
 from elasticsearch import AsyncElasticsearch
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from openhexa_core.elasticsearch.client import close_client, get_client
 from openhexa_core.elasticsearch.index import create_index, ensure_alias
 
-from app.api.v1 import stations
+from app.api.v1 import stations, status
 from app.config import Settings, get_settings
 from app.domain.stations.ingestion import ingest_stations
 from app.domain.stations.mappings import STATION_MAPPING
@@ -56,4 +57,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="OpenHexa Essence API", lifespan=lifespan)
+# API publique en lecture seule (données ouvertes, pas de cookies/session) :
+# CORS permissif nécessaire puisque le frontend est servi sur une origine distincte.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
 app.include_router(stations.router, prefix="/api/v1")
+app.include_router(status.router, prefix="/api/v1")

@@ -20,5 +20,8 @@ STATION_MAPPING: dict[str, Any] = {
         "gplc": FLOAT,
         "mise_a_jour": DATE,
         "autoroute": BOOLEAN,
+        "service_24_7": BOOLEAN,
+        "paiement_cb": BOOLEAN,
+        "boutique": BOOLEAN,
     }
 }

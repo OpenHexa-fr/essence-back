@@ -31,6 +31,10 @@ async def search(
     lat: float | None = None,
     lon: float | None = None,
     radius_km: float = 10.0,
+    prix_max: float | None = None,
+    service_24_7: bool | None = None,
+    paiement_cb: bool | None = None,
+    boutique: bool | None = None,
     tri: StationSort | None = None,
     search_after: list[str] | None = Query(None),
     size: int = 20,
@@ -52,6 +56,10 @@ async def search(
         lat=lat,
         lon=lon,
         radius_km=radius_km,
+        prix_max=prix_max,
+        service_24_7=service_24_7,
+        paiement_cb=paiement_cb,
+        boutique=boutique,
         tri=tri,
     )
     index = f"{settings.es_index_prefix}-stations"

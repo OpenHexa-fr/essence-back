@@ -30,6 +30,9 @@ class Station(BaseDocument):
     gplc: float | None = None
     mise_a_jour: str | None = None
     autoroute: bool = False
+    service_24_7: bool = False
+    paiement_cb: bool = False
+    boutique: bool = False
 
 
 class StationSearchParams(BaseModel):
@@ -39,6 +42,10 @@ class StationSearchParams(BaseModel):
     lat: float | None = None
     lon: float | None = None
     radius_km: float = 10.0
+    prix_max: float | None = None
+    service_24_7: bool | None = None
+    paiement_cb: bool | None = None
+    boutique: bool | None = None
     tri: StationSort | None = None
 
 

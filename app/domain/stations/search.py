@@ -10,12 +10,38 @@ from openhexa_core.elasticsearch.search import build_filters, paginate
 
 from app.domain.stations.schemas import StationSearchParams
 
+_FUEL_FIELDS = ("gazole", "sp95", "sp98", "e10", "e85", "gplc")
+
+
+def _price_max_filter(params: StationSearchParams) -> dict[str, Any] | None:
+    if params.prix_max is None:
+        return None
+    if params.carburant:
+        return {"range": {params.carburant: {"lte": params.prix_max}}}
+    # Sans carburant précis, une station passe le filtre si au moins un prix respecte le plafond.
+    return {
+        "bool": {
+            "should": [{"range": {field: {"lte": params.prix_max}}} for field in _FUEL_FIELDS],
+            "minimum_should_match": 1,
+        }
+    }
+
 
 def _build_station_query(params: StationSearchParams) -> dict[str, Any]:
-    filters = build_filters(ville=params.ville, code_postal=params.code_postal)
+    filters = build_filters(
+        ville=params.ville,
+        code_postal=params.code_postal,
+        service_24_7=True if params.service_24_7 else None,
+        paiement_cb=True if params.paiement_cb else None,
+        boutique=True if params.boutique else None,
+    )
 
     if params.carburant:
         filters.append({"exists": {"field": params.carburant}})
+
+    price_max_filter = _price_max_filter(params)
+    if price_max_filter is not None:
+        filters.append(price_max_filter)
 
     if params.lat is not None and params.lon is not None:
         filters.append(
@@ -53,6 +79,7 @@ def _build_station_sort(params: StationSearchParams) -> list[dict[str, Any]]:
         ]
     if params.tri == "prix" and params.carburant:
         return [{params.carburant: "asc"}, {"_seq_no": "asc"}]
+    # "recent" et "pertinence" (par défaut) : les prix les plus récemment mis à jour d'abord.
     return [{"mise_a_jour": "desc"}, {"_seq_no": "asc"}]
 
 
