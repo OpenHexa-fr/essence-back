@@ -41,7 +41,7 @@ async def search_stations(
 ) -> dict[str, Any]:
     """Recherche des stations selon `params`, paginée par `search_after`."""
     query = _build_station_query(params)
-    sort = [{"mise_a_jour": "desc"}, {"_id": "asc"}]
+    sort = [{"mise_a_jour": "desc"}, {"_seq_no": "asc"}]
     return await paginate(
         client, index=index, query=query, sort=sort, search_after=search_after, size=size
     )

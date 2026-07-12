@@ -7,7 +7,7 @@ WORKDIR /app
 COPY core/ /core/
 RUN pip install --no-cache-dir /core
 
-COPY essence-back/pyproject.toml .
+COPY essence-back/pyproject.toml essence-back/README.md ./
 RUN pip install --no-cache-dir -e .
 
 COPY essence-back/app/ app/
