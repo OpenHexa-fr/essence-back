@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from openhexa_core.models import BaseDocument, BasePaginatedResponse
 from pydantic import BaseModel
+
+StationSort = Literal["prix", "distance", "recent"]
 
 
 class GeoPoint(BaseModel):
@@ -35,6 +39,7 @@ class StationSearchParams(BaseModel):
     lat: float | None = None
     lon: float | None = None
     radius_km: float = 10.0
+    tri: StationSort | None = None
 
 
 class StationSearchResponse(BasePaginatedResponse[Station]):

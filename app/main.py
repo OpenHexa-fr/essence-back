@@ -22,7 +22,9 @@ logger = structlog.get_logger(__name__)
 
 
 async def _polling_loop(client: AsyncElasticsearch, settings: Settings, index_alias: str) -> None:
-    """Interroge périodiquement la source des prix carburants et réindexe les stations."""
+    """Synchronisation de fond, filet de sécurité en complément du rafraîchissement
+    à la demande déclenché par les recherches (voir `domain/stations/refresh.py`).
+    """
     while True:
         try:
             await ingest_stations(client, index_alias, settings.prix_carburants_url)

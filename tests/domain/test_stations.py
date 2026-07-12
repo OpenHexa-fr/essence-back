@@ -10,7 +10,12 @@ from elasticsearch import NotFoundError
 
 from app.domain.stations.ingestion import extract_stations_xml, parse_stations_xml
 from app.domain.stations.schemas import StationSearchParams
-from app.domain.stations.search import _build_station_query, get_station_by_id, search_stations
+from app.domain.stations.search import (
+    _build_station_query,
+    _build_station_sort,
+    get_station_by_id,
+    search_stations,
+)
 
 _SAMPLE_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
 <pdv_liste>
@@ -119,6 +124,50 @@ def test_build_station_query_filters_on_geo_distance() -> None:
     assert {
         "geo_distance": {"distance": "5.0km", "location": {"lat": 45.75, "lon": 4.85}}
     } in query["bool"]["filter"]
+
+
+def test_build_station_sort_defaults_to_recency() -> None:
+    assert _build_station_sort(StationSearchParams()) == [
+        {"mise_a_jour": "desc"},
+        {"_seq_no": "asc"},
+    ]
+
+
+def test_build_station_sort_explicit_recent() -> None:
+    assert _build_station_sort(StationSearchParams(tri="recent")) == [
+        {"mise_a_jour": "desc"},
+        {"_seq_no": "asc"},
+    ]
+
+
+def test_build_station_sort_by_price_requires_carburant() -> None:
+    sort = _build_station_sort(StationSearchParams(carburant="sp95", tri="prix"))
+
+    assert sort[0] == {"sp95": "asc"}
+
+
+def test_build_station_sort_by_price_falls_back_without_carburant() -> None:
+    sort = _build_station_sort(StationSearchParams(tri="prix"))
+
+    assert sort[0] == {"mise_a_jour": "desc"}
+
+
+def test_build_station_sort_by_distance_requires_location() -> None:
+    sort = _build_station_sort(StationSearchParams(lat=45.75, lon=4.85, tri="distance"))
+
+    assert sort[0] == {
+        "_geo_distance": {
+            "location": {"lat": 45.75, "lon": 4.85},
+            "order": "asc",
+            "unit": "km",
+        }
+    }
+
+
+def test_build_station_sort_by_distance_falls_back_without_location() -> None:
+    sort = _build_station_sort(StationSearchParams(tri="distance"))
+
+    assert sort[0] == {"mise_a_jour": "desc"}
 
 
 async def test_search_stations_calls_paginate_with_built_query() -> None:

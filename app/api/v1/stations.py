@@ -7,7 +7,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from openhexa_core.elasticsearch.client import get_client
 
 from app.config import Settings, get_settings
-from app.domain.stations.schemas import Station, StationSearchParams, StationSearchResponse
+from app.domain.stations.refresh import StationsRefresher, get_stations_refresher
+from app.domain.stations.schemas import (
+    Station,
+    StationSearchParams,
+    StationSearchResponse,
+    StationSort,
+)
 from app.domain.stations.search import get_station_by_id, search_stations
 
 router = APIRouter(prefix="/stations", tags=["stations"])
@@ -25,12 +31,20 @@ async def search(
     lat: float | None = None,
     lon: float | None = None,
     radius_km: float = 10.0,
+    tri: StationSort | None = None,
     search_after: list[str] | None = Query(None),
     size: int = 20,
     client: AsyncElasticsearch = Depends(_es_client),
     settings: Settings = Depends(get_settings),
+    refresher: StationsRefresher = Depends(get_stations_refresher),
 ) -> StationSearchResponse:
-    """Recherche des stations-service par ville, carburant disponible ou proximité géographique."""
+    """Recherche des stations-service par ville, carburant disponible ou proximité géographique.
+
+    Déclenche, si nécessaire, un rafraîchissement à la demande depuis le flux
+    "instantané" (republié toutes les 10 min côté gouvernement) : la recherche
+    en cours répond avec les données actuelles, mais garantit qu'une donnée
+    trop ancienne ne le reste pas si des recherches ont lieu régulièrement.
+    """
     params = StationSearchParams(
         ville=ville,
         code_postal=code_postal,
@@ -38,8 +52,10 @@ async def search(
         lat=lat,
         lon=lon,
         radius_km=radius_km,
+        tri=tri,
     )
     index = f"{settings.es_index_prefix}-stations"
+    refresher.trigger_if_stale(client, index, settings.prix_carburants_url)
     page = await search_stations(client, index, params, search_after=search_after, size=size)
 
     items = [Station.model_validate(hit["_source"]) for hit in page["hits"]]
