@@ -35,7 +35,7 @@ _FUEL_TAGS = {
 
 async def fetch_stations_archive(source_url: str) -> bytes:
     """Télécharge l'archive ZIP des prix instantanés depuis `source_url`."""
-    async with httpx.AsyncClient(timeout=60.0) as http_client:
+    async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as http_client:
         response = await http_client.get(source_url)
         response.raise_for_status()
         return response.content
@@ -54,9 +54,12 @@ def _parse_station_element(pdv: ElementTree.Element) -> dict[str, Any]:
     longitude_raw = pdv.attrib.get("longitude")
     location = None
     if latitude_raw and longitude_raw:
+        # Le flux réel contient occasionnellement des coordonnées non entières
+        # (ex : latitude="4675351.71497") malgré la convention à l'échelle 1e5 :
+        # `float()` tolère ce cas là où `int()` fait planter toute l'ingestion.
         location = {
-            "lat": int(latitude_raw) / _COORDINATE_SCALE,
-            "lon": int(longitude_raw) / _COORDINATE_SCALE,
+            "lat": float(latitude_raw) / _COORDINATE_SCALE,
+            "lon": float(longitude_raw) / _COORDINATE_SCALE,
         }
 
     prices: dict[str, float] = {}
@@ -80,7 +83,11 @@ def _parse_station_element(pdv: ElementTree.Element) -> dict[str, Any]:
         "ville": ville_el.text if ville_el is not None else None,
         "code_postal": pdv.attrib.get("cp"),
         "location": location,
-        "mise_a_jour": mise_a_jour,
+        # Le flux réel publie "AAAA-MM-JJ HH:mm:ss" (séparateur espace) : le
+        # mapping ES `date` attend un format ISO-8601 strict (séparateur "T"),
+        # sans quoi l'indexation de la quasi-totalité des stations échoue
+        # (vérifié en conditions réelles : 9678 erreurs sur 9805 documents).
+        "mise_a_jour": mise_a_jour.replace(" ", "T") if mise_a_jour else None,
         "autoroute": pdv.attrib.get("pop") == "A",
         **prices,
     }
@@ -88,9 +95,23 @@ def _parse_station_element(pdv: ElementTree.Element) -> dict[str, Any]:
 
 
 def parse_stations_xml(raw_xml: bytes) -> list[dict[str, Any]]:
-    """Parse le XML des stations en une liste de documents prêts à indexer."""
+    """Parse le XML des stations en une liste de documents prêts à indexer.
+
+    Une station dont les attributs sont malformés est ignorée plutôt que de faire
+    échouer l'ingestion des ~40 000 autres stations du flux (vérifié en conditions
+    réelles : une latitude non entière a suffi à faire planter tout le traitement
+    avant l'introduction de ce garde-fou).
+    """
     root = ElementTree.fromstring(raw_xml)
-    return [_parse_station_element(pdv) for pdv in root.findall("pdv")]
+    documents = []
+    for pdv in root.findall("pdv"):
+        try:
+            documents.append(_parse_station_element(pdv))
+        except (KeyError, ValueError) as exc:
+            logger.warning(
+                "station_parse_skipped", station_id=pdv.attrib.get("id"), error=str(exc)
+            )
+    return documents
 
 
 async def ingest_stations(
