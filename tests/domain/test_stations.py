@@ -49,8 +49,58 @@ def test_parse_stations_xml_builds_documents_with_scaled_coordinates() -> None:
     assert station["gazole"] == 1.850
     assert station["sp95"] == 1.950
     assert station["autoroute"] is True
-    assert station["mise_a_jour"] == "2024-01-15 10:05:00"
+    assert station["mise_a_jour"] == "2024-01-15T10:05:00"
     assert len(station["_id"]) == 16
+
+
+def test_parse_stations_xml_converts_maj_to_iso8601() -> None:
+    # Le flux réel publie "AAAA-MM-JJ HH:mm:ss" : Elasticsearch (mapping `date`)
+    # exige un séparateur "T", sinon l'indexation échoue en masse (vérifié en
+    # conditions réelles).
+    stations = parse_stations_xml(_SAMPLE_XML)
+
+    assert stations[0]["mise_a_jour"] == "2024-01-15T10:05:00"
+
+
+def test_parse_stations_xml_accepts_non_integer_coordinates() -> None:
+    # Vu en conditions réelles sur le flux roulez-eco.fr : certaines stations
+    # publient une latitude/longitude avec décimales malgré la convention
+    # entière à l'échelle 1e5 (ex: "4675351.71497").
+    xml = b"""<?xml version="1.0" encoding="UTF-8"?>
+<pdv_liste>
+  <pdv id="99999999" latitude="4675351.71497" longitude="500000" cp="75001" pop="A">
+    <adresse>1 rue Test</adresse>
+    <ville>Paris</ville>
+    <prix nom="Gazole" id="1" maj="2024-01-15 10:00:00" valeur="1.850"/>
+  </pdv>
+</pdv_liste>
+"""
+
+    stations = parse_stations_xml(xml)
+
+    assert len(stations) == 1
+    assert stations[0]["location"]["lat"] == 46.7535171497
+
+
+def test_parse_stations_xml_skips_malformed_station_without_failing_others() -> None:
+    xml = b"""<?xml version="1.0" encoding="UTF-8"?>
+<pdv_liste>
+  <pdv id="1" latitude="not-a-number" longitude="500000" cp="75001" pop="A">
+    <adresse>Bad station</adresse>
+    <ville>Paris</ville>
+  </pdv>
+  <pdv id="2" latitude="4529500" longitude="500000" cp="75001" pop="A">
+    <adresse>Good station</adresse>
+    <ville>Paris</ville>
+    <prix nom="Gazole" id="1" maj="2024-01-15 10:00:00" valeur="1.850"/>
+  </pdv>
+</pdv_liste>
+"""
+
+    stations = parse_stations_xml(xml)
+
+    assert len(stations) == 1
+    assert stations[0]["station_id"] == "2"
 
 
 def test_build_station_query_returns_match_all_without_filters() -> None:
