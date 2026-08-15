@@ -7,7 +7,7 @@ from typing import Literal
 from openhexa_core.models import BaseDocument, BasePaginatedResponse
 from pydantic import BaseModel
 
-StationSort = Literal["prix", "distance"]
+StationSort = Literal["score", "prix", "distance", "recent"]
 
 
 class GeoPoint(BaseModel):
@@ -38,6 +38,8 @@ class StationSearchParams(BaseModel):
     lon: float | None = None
     radius_km: float = 10.0
     tri: StationSort | None = None
+    # Ignoré sans `carburant` (pas de plafond de prix sans savoir quel prix comparer).
+    prix_max: float | None = None
 
 
 class StationSearchResponse(BasePaginatedResponse[Station]):

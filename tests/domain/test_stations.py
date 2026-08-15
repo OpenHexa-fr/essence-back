@@ -94,6 +94,18 @@ def test_build_station_query_filters_on_geo_distance() -> None:
     } in query["bool"]["filter"]
 
 
+def test_build_station_query_filters_on_prix_max_when_carburant_set() -> None:
+    query = _build_station_query(StationSearchParams(carburant="sp95", prix_max=1.8))
+
+    assert {"range": {"sp95": {"lte": 1.8}}} in query["bool"]["filter"]
+
+
+def test_build_station_query_ignores_prix_max_without_carburant() -> None:
+    query = _build_station_query(StationSearchParams(prix_max=1.8))
+
+    assert query == {"match_all": {}}
+
+
 def test_build_station_sort_defaults_to_stable_order() -> None:
     assert _build_station_sort(StationSearchParams()) == [{"_seq_no": "asc"}]
 
@@ -104,10 +116,22 @@ def test_build_station_sort_by_price_requires_carburant() -> None:
     assert sort[0] == {"sp95": "asc"}
 
 
+def test_build_station_sort_by_score_behaves_like_price() -> None:
+    sort = _build_station_sort(StationSearchParams(carburant="sp95", tri="score"))
+
+    assert sort[0] == {"sp95": "asc"}
+
+
 def test_build_station_sort_by_price_falls_back_without_carburant() -> None:
     sort = _build_station_sort(StationSearchParams(tri="prix"))
 
     assert sort[0] == {"_seq_no": "asc"}
+
+
+def test_build_station_sort_by_recent_does_not_require_carburant_or_location() -> None:
+    sort = _build_station_sort(StationSearchParams(tri="recent"))
+
+    assert sort[0] == {"mise_a_jour": "desc"}
 
 
 def test_build_station_sort_by_distance_requires_location() -> None:

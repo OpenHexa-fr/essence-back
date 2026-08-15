@@ -12,16 +12,18 @@ from app.domain.stations.schemas import StationSearchParams
 
 
 def _build_station_query(params: StationSearchParams) -> dict[str, Any]:
-    """Construit la clause `query` : carburant disponible et/ou rayon de recherche.
+    """Construit la clause `query` : carburant disponible, plafond de prix et/ou rayon.
 
-    Seuls ces deux critères sont exposés en recherche (le type de carburant et
-    le rayon autour d'une position) — pas de filtre par ville, service ou
-    plafond de prix.
+    Le plafond de prix (`prix_max`) n'a de sens que relativement à un carburant
+    précis : ignoré si `carburant` n'est pas fourni. Pas de filtre par ville ou
+    service (données non disponibles dans la source actuelle).
     """
     filters: list[dict[str, Any]] = []
 
     if params.carburant:
         filters.append({"exists": {"field": params.carburant}})
+        if params.prix_max is not None:
+            filters.append({"range": {params.carburant: {"lte": params.prix_max}}})
 
     if params.lat is not None and params.lon is not None:
         filters.append(
@@ -39,13 +41,19 @@ def _build_station_query(params: StationSearchParams) -> dict[str, Any]:
 
 
 def _build_station_sort(params: StationSearchParams) -> list[dict[str, Any]]:
-    """Construit la clause `sort` : distance croissante ou prix croissant.
+    """Construit la clause `sort` : distance, prix, récence, ou "score".
 
-    Le tri "distance" exige une position (lat/lon) ; le tri "prix" exige un
-    carburant sélectionné (on ne peut pas trier sur un prix sans savoir lequel).
-    Si les données nécessaires manquent, ou si aucun tri n'est demandé, on
-    retombe sur l'ordre stable de l'index (`_seq_no`) : pas de notion de
-    récence ou de score de pertinence.
+    - "distance" exige une position (lat/lon).
+    - "prix"/"score" exigent un carburant sélectionné (on ne peut pas trier sur
+      un prix sans savoir lequel). "score" est pour l'instant un simple alias
+      de "prix" — pas encore de score de pertinence composite (distance +
+      prix + fraîcheur) — exposé sous son propre nom pour ne pas figer cette
+      sémantique tant qu'il n'est pas réellement implémenté.
+    - "recent" trie par fraîcheur du prix (`mise_a_jour` décroissant), seul
+      tri qui ne requiert ni position ni carburant.
+
+    Si les données nécessaires manquent pour le tri demandé, ou si aucun tri
+    n'est demandé, on retombe sur l'ordre stable de l'index (`_seq_no`).
     """
     if params.tri == "distance" and params.lat is not None and params.lon is not None:
         return [
@@ -58,7 +66,9 @@ def _build_station_sort(params: StationSearchParams) -> list[dict[str, Any]]:
             },
             {"_seq_no": "asc"},
         ]
-    if params.tri == "prix" and params.carburant:
+    if params.tri == "recent":
+        return [{"mise_a_jour": "desc"}, {"_seq_no": "asc"}]
+    if params.tri in ("prix", "score") and params.carburant:
         return [{params.carburant: "asc"}, {"_seq_no": "asc"}]
     return [{"_seq_no": "asc"}]
 

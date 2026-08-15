@@ -30,6 +30,7 @@ async def search(
     lon: float | None = None,
     radius_km: float = 10.0,
     tri: StationSort | None = None,
+    prix_max: float | None = None,
     search_after: list[str] | None = Query(None),
     size: int = 20,
     client: AsyncElasticsearch = Depends(_es_client),
@@ -49,6 +50,7 @@ async def search(
         lon=lon,
         radius_km=radius_km,
         tri=tri,
+        prix_max=prix_max,
     )
     index = f"{settings.es_index_prefix}-stations"
     refresher.trigger_if_stale(client, index, settings.data_gouv_live_url)
