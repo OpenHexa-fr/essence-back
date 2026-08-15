@@ -9,6 +9,15 @@ from pydantic import BaseModel
 
 StationSort = Literal["score", "prix", "distance", "recent"]
 
+# Regroupements de carburants exposés en recherche (ex. "Sans-plomb" combine
+# E10 et SP95, deux carburants distincts mais considérés comme une même
+# famille par les comparateurs grand public). Purement une abstraction de
+# requête : rien n'est stocké ni réindexé, `Station` garde un champ par
+# carburant réel.
+FUEL_FAMILIES: dict[str, list[str]] = {
+    "sans_plomb": ["e10", "sp95"],
+}
+
 
 class GeoPoint(BaseModel):
     lat: float
@@ -33,6 +42,7 @@ class Station(BaseDocument):
 
 
 class StationSearchParams(BaseModel):
+    # Un carburant réel (ex. "sp98") ou une clé de FUEL_FAMILIES (ex. "sans_plomb").
     carburant: str | None = None
     lat: float | None = None
     lon: float | None = None

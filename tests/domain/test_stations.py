@@ -94,6 +94,30 @@ def test_build_station_query_filters_on_geo_distance() -> None:
     } in query["bool"]["filter"]
 
 
+def test_build_station_query_filters_on_fuel_family_with_should_clause() -> None:
+    query = _build_station_query(StationSearchParams(carburant="sans_plomb"))
+
+    should = query["bool"]["filter"][0]["bool"]["should"]
+    assert {"exists": {"field": "e10"}} in should
+    assert {"exists": {"field": "sp95"}} in should
+
+
+def test_build_station_query_filters_on_fuel_family_prix_max_with_should_clause() -> None:
+    query = _build_station_query(StationSearchParams(carburant="sans_plomb", prix_max=1.8))
+
+    range_clause = query["bool"]["filter"][1]["bool"]["should"]
+    assert {"range": {"e10": {"lte": 1.8}}} in range_clause
+    assert {"range": {"sp95": {"lte": 1.8}}} in range_clause
+
+
+def test_build_station_sort_by_fuel_family_uses_script_sort() -> None:
+    sort = _build_station_sort(StationSearchParams(carburant="sans_plomb", tri="prix"))
+
+    script_source = sort[0]["_script"]["script"]["source"]
+    assert "doc['e10']" in script_source
+    assert "doc['sp95']" in script_source
+
+
 def test_build_station_query_filters_on_prix_max_when_carburant_set() -> None:
     query = _build_station_query(StationSearchParams(carburant="sp95", prix_max=1.8))
 
