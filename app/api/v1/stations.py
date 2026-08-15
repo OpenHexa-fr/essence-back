@@ -25,16 +25,10 @@ async def _es_client() -> AsyncElasticsearch:
 
 @router.get("/search", response_model=StationSearchResponse)
 async def search(
-    ville: str | None = None,
-    code_postal: str | None = None,
     carburant: str | None = None,
     lat: float | None = None,
     lon: float | None = None,
     radius_km: float = 10.0,
-    prix_max: float | None = None,
-    service_24_7: bool | None = None,
-    paiement_cb: bool | None = None,
-    boutique: bool | None = None,
     tri: StationSort | None = None,
     search_after: list[str] | None = Query(None),
     size: int = 20,
@@ -42,7 +36,7 @@ async def search(
     settings: Settings = Depends(get_settings),
     refresher: StationsRefresher = Depends(get_stations_refresher),
 ) -> StationSearchResponse:
-    """Recherche des stations-service par ville, carburant disponible ou proximité géographique.
+    """Recherche des stations-service par carburant disponible et rayon autour d'une position.
 
     Déclenche, si nécessaire, un rafraîchissement à la demande depuis le flux
     "instantané" (republié toutes les 10 min côté gouvernement) : la recherche
@@ -50,20 +44,14 @@ async def search(
     trop ancienne ne le reste pas si des recherches ont lieu régulièrement.
     """
     params = StationSearchParams(
-        ville=ville,
-        code_postal=code_postal,
         carburant=carburant,
         lat=lat,
         lon=lon,
         radius_km=radius_km,
-        prix_max=prix_max,
-        service_24_7=service_24_7,
-        paiement_cb=paiement_cb,
-        boutique=boutique,
         tri=tri,
     )
     index = f"{settings.es_index_prefix}-stations"
-    refresher.trigger_if_stale(client, index, settings.prix_carburants_url)
+    refresher.trigger_if_stale(client, index, settings.data_gouv_live_url)
     page = await search_stations(client, index, params, search_after=search_after, size=size)
 
     items = [Station.model_validate(hit["_source"]) for hit in page["hits"]]

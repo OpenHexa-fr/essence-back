@@ -2,9 +2,9 @@
 
 API FastAPI du domaine carburants de l'écosystème OpenHexa.
 
-Interroge `https://donnees.roulez-eco.fr/opendata/instantane_ruptures` (archive
-ZIP contenant un fichier XML), extrait les stations-service et leurs prix, et les
-indexe dans Elasticsearch, via deux mécanismes complémentaires :
+Interroge l'API JSON `data.economie.gouv.fr` (dataset "Prix des carburants en
+France - Flux instantané - v2"), extrait les stations-service et leurs prix, et
+les indexe dans Elasticsearch, via deux mécanismes complémentaires :
 
 - **Synchronisation de fond** : boucle de polling démarrée au lifespan de
   l'application, toutes les `POLLING_INTERVAL_SECONDS` (quotidienne par défaut) —

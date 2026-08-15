@@ -28,7 +28,7 @@ async def _polling_loop(client: AsyncElasticsearch, settings: Settings, index_al
     """
     while True:
         try:
-            await ingest_stations(client, index_alias, settings.prix_carburants_url)
+            await ingest_stations(client, index_alias, settings.data_gouv_live_url)
         except Exception:  # noqa: BLE001 - le polling ne doit jamais s'arrêter sur une erreur réseau
             logger.exception("stations_polling_failed")
         await asyncio.sleep(settings.polling_interval_seconds)

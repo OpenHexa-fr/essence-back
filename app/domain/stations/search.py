@@ -6,42 +6,22 @@ from typing import Any
 
 from elasticsearch import AsyncElasticsearch, NotFoundError
 from openhexa_core.elasticsearch.ingestion import make_document_id
-from openhexa_core.elasticsearch.search import build_filters, paginate
+from openhexa_core.elasticsearch.search import paginate
 
 from app.domain.stations.schemas import StationSearchParams
 
-_FUEL_FIELDS = ("gazole", "sp95", "sp98", "e10", "e85", "gplc")
-
-
-def _price_max_filter(params: StationSearchParams) -> dict[str, Any] | None:
-    if params.prix_max is None:
-        return None
-    if params.carburant:
-        return {"range": {params.carburant: {"lte": params.prix_max}}}
-    # Sans carburant précis, une station passe le filtre si au moins un prix respecte le plafond.
-    return {
-        "bool": {
-            "should": [{"range": {field: {"lte": params.prix_max}}} for field in _FUEL_FIELDS],
-            "minimum_should_match": 1,
-        }
-    }
-
 
 def _build_station_query(params: StationSearchParams) -> dict[str, Any]:
-    filters = build_filters(
-        ville=params.ville,
-        code_postal=params.code_postal,
-        service_24_7=True if params.service_24_7 else None,
-        paiement_cb=True if params.paiement_cb else None,
-        boutique=True if params.boutique else None,
-    )
+    """Construit la clause `query` : carburant disponible et/ou rayon de recherche.
+
+    Seuls ces deux critères sont exposés en recherche (le type de carburant et
+    le rayon autour d'une position) — pas de filtre par ville, service ou
+    plafond de prix.
+    """
+    filters: list[dict[str, Any]] = []
 
     if params.carburant:
         filters.append({"exists": {"field": params.carburant}})
-
-    price_max_filter = _price_max_filter(params)
-    if price_max_filter is not None:
-        filters.append(price_max_filter)
 
     if params.lat is not None and params.lon is not None:
         filters.append(
@@ -59,12 +39,13 @@ def _build_station_query(params: StationSearchParams) -> dict[str, Any]:
 
 
 def _build_station_sort(params: StationSearchParams) -> list[dict[str, Any]]:
-    """Construit la clause `sort` : prix croissant, distance croissante, ou récence.
+    """Construit la clause `sort` : distance croissante ou prix croissant.
 
     Le tri "distance" exige une position (lat/lon) ; le tri "prix" exige un
     carburant sélectionné (on ne peut pas trier sur un prix sans savoir lequel).
-    Si les données nécessaires manquent, on retombe sur le tri par défaut plutôt
-    que d'échouer.
+    Si les données nécessaires manquent, ou si aucun tri n'est demandé, on
+    retombe sur l'ordre stable de l'index (`_seq_no`) : pas de notion de
+    récence ou de score de pertinence.
     """
     if params.tri == "distance" and params.lat is not None and params.lon is not None:
         return [
@@ -79,8 +60,7 @@ def _build_station_sort(params: StationSearchParams) -> list[dict[str, Any]]:
         ]
     if params.tri == "prix" and params.carburant:
         return [{params.carburant: "asc"}, {"_seq_no": "asc"}]
-    # "recent" et "pertinence" (par défaut) : les prix les plus récemment mis à jour d'abord.
-    return [{"mise_a_jour": "desc"}, {"_seq_no": "asc"}]
+    return [{"_seq_no": "asc"}]
 
 
 async def search_stations(
