@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from openhexa_core.elasticsearch.client import close_client, get_client
 from openhexa_core.elasticsearch.index import create_index, ensure_alias
+from openhexa_core.elasticsearch.search import count
 
 from app.api.v1 import stations, status
 from app.config import Settings, get_settings
@@ -22,16 +23,40 @@ from app.domain.stations.mappings import STATION_MAPPING
 logger = structlog.get_logger(__name__)
 
 
+async def _index_has_data(client: AsyncElasticsearch, index_alias: str) -> bool:
+    """True si `index_alias` contient déjà au moins un document.
+
+    Avec `min-replicas: 0` (scale-to-zero), le process redémarre à chaque cold
+    start : sans ce check, l'ingestion initiale repartirait de zéro à chaque
+    fois alors que les données sont déjà indexées (le rafraîchissement à la
+    demande de `domain/stations/refresh.py` couvre déjà la fraîcheur). Si le
+    comptage échoue, on retente l'ingestion par prudence plutôt que de la
+    sauter à tort.
+    """
+    try:
+        return await count(client, index_alias) > 0
+    except Exception:  # noqa: BLE001 - le comptage ne doit jamais bloquer/casser le polling
+        return False
+
+
 async def _polling_loop(client: AsyncElasticsearch, settings: Settings, index_alias: str) -> None:
     """Synchronisation de fond, filet de sécurité en complément du rafraîchissement
     à la demande déclenché par les recherches (voir `domain/stations/refresh.py`).
     """
-    while True:
+    if await _index_has_data(client, index_alias):
+        logger.info("stations_polling_initial_run_skipped", reason="index_already_populated")
+    else:
         try:
             await ingest_stations(client, index_alias, settings.data_gouv_live_url)
         except Exception:  # noqa: BLE001 - le polling ne doit jamais s'arrêter sur une erreur réseau
             logger.exception("stations_polling_failed")
+
+    while True:
         await asyncio.sleep(settings.polling_interval_seconds)
+        try:
+            await ingest_stations(client, index_alias, settings.data_gouv_live_url)
+        except Exception:  # noqa: BLE001 - le polling ne doit jamais s'arrêter sur une erreur réseau
+            logger.exception("stations_polling_failed")
 
 
 @asynccontextmanager
