@@ -58,7 +58,10 @@ async def search(
 
     items = [Station.model_validate(hit["_source"]) for hit in page["hits"]]
     return StationSearchResponse(
-        items=items, total=page["total"], next_search_after=page["next_search_after"]
+        items=items,
+        total=page["total"],
+        total_relation=page["total_relation"],
+        next_cursor=page["next_cursor"],
     )
 
 
