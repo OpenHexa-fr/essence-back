@@ -1,4 +1,4 @@
-# Image de déploiement (Azure Container Apps / CI GitHub Actions) : le contexte
+# Image autonome : le contexte
 # de build est ce repo seul (checkout GitHub), contrairement à Dockerfile qui
 # suppose un contexte monorepo pour le dev local.
 #

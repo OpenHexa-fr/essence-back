@@ -89,7 +89,7 @@ Les tests n'ont besoin d'aucun Elasticsearch : `core/estest` simule le cluster.
 # Dev local : depuis la racine du monorepo (core/ et essence-back/ côte à côte)
 docker build -f essence-back/Dockerfile -t openhexa-essence-back .
 
-# Déploiement (CI) : contexte = ce repo seul, core est cloné à la référence CORE_REF
+# Contexte = ce repo seul, core est cloné à la référence CORE_REF
 docker build -f Dockerfile.deploy --build-arg CORE_REF=main -t openhexa-essence-back .
 ```
 
@@ -105,4 +105,4 @@ go get github.com/openhexa-fr/core@v0.1.0
 ```
 
 puis supprimer le `git clone` de `Dockerfile.deploy`, le checkout de `core` et
-`CORE_REF` dans `.github/workflows/deploy.yml`.
+`CORE_REF` dans `.github/workflows/test.yml`.
