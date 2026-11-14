@@ -9,21 +9,38 @@ permissions:
   id-token: write
   contents: read
 
+env:
+  # go.mod référence core par `replace => ../core` (core n'est pas encore publié
+  # comme module versionné) : core est donc récupéré à côté de ce repo.
+  # Une fois core tagué, supprimer le `replace` de go.mod, cette variable, le
+  # checkout de core ci-dessous et `--build-arg` dans l'étape de build.
+  CORE_REF: main
+
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-      # openhexa-core n'est pas encore publié sur PyPI : même source que
-      # Dockerfile.deploy, sans quoi `pip install -e .` échoue à le résoudre.
-      - run: pip install "git+https://github.com/OpenHexa-fr/core.git@main"
-      - run: pip install -e ".[dev]"
-      - run: ruff check app tests
-      - run: mypy app
-      - run: pytest
+          path: essence-back
+      - uses: actions/checkout@v4
+        with:
+          repository: OpenHexa-fr/core
+          ref: ${{ env.CORE_REF }}
+          path: core
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: essence-back/go.mod
+          cache-dependency-path: essence-back/go.sum
+      - name: Format
+        working-directory: essence-back
+        run: test -z "$(gofmt -l .)"
+      - name: Vet
+        working-directory: essence-back
+        run: go vet ./...
+      - name: Tests
+        working-directory: essence-back
+        run: go test -race ./...
 
   deploy:
     # Le déploiement ne part que si la suite passe : sans cette dépendance, les
@@ -48,6 +65,7 @@ jobs:
         run: |
           az acr build --registry acropenhexa \
             --image essence-back:${{ github.sha }} \
+            --build-arg CORE_REF=${{ env.CORE_REF }} \
             --file Dockerfile.deploy .
 
       - name: Deploy new revision
