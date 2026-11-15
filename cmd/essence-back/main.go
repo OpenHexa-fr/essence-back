@@ -57,9 +57,15 @@ func run() error {
 	if _, err := es.EnsureAlias(ctx, client, alias, indexName); err != nil {
 		return err
 	}
+	history := settings.HistoryStream()
+	if _, err := es.EnsureDataStream(
+		ctx, client, history, stations.HistoryMapping(), settings.HistoryRetention,
+	); err != nil {
+		return err
+	}
 
 	ingest := func(ctx context.Context) (int, int, error) {
-		return stations.Ingest(ctx, client, alias, settings.DataGouvLiveURL)
+		return stations.Ingest(ctx, client, alias, history, settings.DataGouvLiveURL)
 	}
 	refresher := stations.NewRefresher(ctx, settings.SearchRefreshTTL, ingest)
 

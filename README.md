@@ -20,6 +20,25 @@ les indexe dans Elasticsearch, via deux mécanismes complémentaires :
   recherche qui l'a déclenché : celle-ci répond avec les données actuelles, la
   recherche suivante bénéficiera des données fraîches.
 
+## Historique des prix
+
+L'index des stations (`<préfixe>-stations`) ne garde que le dernier prix connu.
+Chaque ingestion ajoute aussi les **nouveaux relevés** au data stream
+`<préfixe>-prix-historique` : un document par station, carburant et date de mise
+à jour publiée (`@timestamp`), avec le prix, la ville, le code postal, la
+position et le drapeau autoroute.
+
+- **Pas de doublon** : l'`_id` est déterministe (station, carburant, date) et les
+  relevés déjà enregistrés sont écartés avant écriture. Réingérer le même flux
+  toutes les 10 minutes n'ajoute que les prix qui ont réellement changé.
+- **Création automatique** au démarrage : modèle d'index (ciblant uniquement ce
+  data stream) puis data stream. L'utilisateur Elasticsearch doit donc avoir le
+  privilège cluster `manage_index_templates`.
+- **Conservation** : illimitée par défaut, bornée par `HISTORY_RETENTION`
+  (ex. `730d`) via le cycle de vie natif des data streams.
+- **Indépendant de l'API** : un échec d'écriture de l'historique est journalisé
+  (`price_history_failed`) sans faire échouer l'ingestion des stations.
+
 ## Contrat d'API
 
 Identique à la version Python : mêmes routes, mêmes paramètres, mêmes champs JSON
@@ -56,7 +75,8 @@ Variables d'environnement (voir `.env.example`, chargé automatiquement s'il exi
 |---|---|
 | `ES_URL` | — (obligatoire) |
 | `ES_API_KEY` ou `ES_USER` + `ES_PASSWORD` | — (l'API key est préférée) |
-| `ES_INDEX_PREFIX` | `openhexa` |
+| `ES_INDEX_PREFIX` | `openhexa` (sur la stack partagée du NAS : `openhexa-essence`) |
+| `HISTORY_RETENTION` | vide (conservation illimitée de l'historique des prix) |
 | `DATA_GOUV_LIVE_URL` | export JSON du flux instantané v2 |
 | `POLLING_INTERVAL_SECONDS` | `86400` |
 | `SEARCH_REFRESH_TTL_SECONDS` | `600` |
