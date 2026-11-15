@@ -7,7 +7,7 @@ import (
 
 func TestLoadDefaults(t *testing.T) {
 	t.Setenv("ES_URL", "http://localhost:9200")
-	for _, key := range []string{"PORT", "DATA_GOUV_LIVE_URL", "POLLING_INTERVAL_SECONDS", "SEARCH_REFRESH_TTL_SECONDS", "ES_INDEX_PREFIX"} {
+	for _, key := range []string{"PORT", "DATA_GOUV_LIVE_URL", "POLLING_INTERVAL_SECONDS", "SEARCH_REFRESH_TTL_SECONDS", "ES_INDEX_PREFIX", "HISTORY_RETENTION"} {
 		t.Setenv(key, "")
 	}
 
@@ -22,6 +22,9 @@ func TestLoadDefaults(t *testing.T) {
 	if settings.StationsAlias() != "openhexa-stations" {
 		t.Errorf("alias = %s", settings.StationsAlias())
 	}
+	if settings.HistoryStream() != "openhexa-prix-historique" || settings.HistoryRetention != "" {
+		t.Errorf("historique = %s (retention %q)", settings.HistoryStream(), settings.HistoryRetention)
+	}
 	if want := "https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/prix-des-carburants-en-france-flux-instantane-v2/exports/json"; settings.DataGouvLiveURL != want {
 		t.Errorf("URL = %s", settings.DataGouvLiveURL)
 	}
@@ -29,7 +32,8 @@ func TestLoadDefaults(t *testing.T) {
 
 func TestLoadReadsTheEnvironment(t *testing.T) {
 	t.Setenv("ES_URL", "http://es:9200")
-	t.Setenv("ES_INDEX_PREFIX", "prod")
+	t.Setenv("ES_INDEX_PREFIX", "openhexa-essence")
+	t.Setenv("HISTORY_RETENTION", "730d")
 	t.Setenv("PORT", "9000")
 	t.Setenv("DATA_GOUV_LIVE_URL", "http://source/export")
 	t.Setenv("POLLING_INTERVAL_SECONDS", "60")
@@ -42,7 +46,8 @@ func TestLoadReadsTheEnvironment(t *testing.T) {
 	}
 	if settings.Addr != ":9000" || settings.DataGouvLiveURL != "http://source/export" ||
 		settings.PollingInterval != time.Minute || settings.SearchRefreshTTL != 30*time.Second ||
-		settings.StationsAlias() != "prod-stations" {
+		settings.StationsAlias() != "openhexa-essence-stations" ||
+		settings.HistoryStream() != "openhexa-essence-prix-historique" || settings.HistoryRetention != "730d" {
 		t.Errorf("settings = %+v", settings)
 	}
 }

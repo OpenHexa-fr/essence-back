@@ -39,6 +39,11 @@ type Settings struct {
 	// SearchRefreshTTL est l'âge à partir duquel une recherche déclenche un
 	// rafraîchissement à la demande.
 	SearchRefreshTTL time.Duration
+
+	// HistoryRetention est la durée de conservation de l'historique des prix
+	// (variable HISTORY_RETENTION, au format Elasticsearch : "730d", "5y"...).
+	// Vide par défaut : conservation illimitée.
+	HistoryRetention string
 }
 
 // Load lit la configuration depuis l'environnement.
@@ -61,8 +66,12 @@ func Load() (Settings, error) {
 		DataGouvLiveURL:  core.String("DATA_GOUV_LIVE_URL", defaultDataGouvLiveURL),
 		PollingInterval:  time.Duration(polling) * time.Second,
 		SearchRefreshTTL: time.Duration(ttl) * time.Second,
+		HistoryRetention: core.String("HISTORY_RETENTION", ""),
 	}, nil
 }
 
 // StationsAlias est l'alias de l'index des stations pour le préfixe donné.
 func (s Settings) StationsAlias() string { return s.ES.IndexPrefix + "-stations" }
+
+// HistoryStream est le data stream de l'historique des prix pour le préfixe donné.
+func (s Settings) HistoryStream() string { return s.ES.IndexPrefix + "-prix-historique" }

@@ -134,31 +134,47 @@ func toFloat(value any) (float64, error) {
 	return 0, fmt.Errorf("valeur non numérique : %v", value)
 }
 
+// recordStationID retourne l'identifiant de la station, vide s'il est absent.
+func recordStationID(record Record) string {
+	if id := record["id"]; truthy(id) {
+		return strings.TrimSpace(pyText(id))
+	}
+	return ""
+}
+
+// parseLocation retourne la position {lat, lon} de la station, ou nil si
+// elle est absente.
+func parseLocation(record Record) (any, error) {
+	geom, ok := record["geom"].(map[string]any)
+	if !ok {
+		return nil, nil
+	}
+	latitude, longitude := geom["lat"], geom["lon"]
+	if latitude == nil || longitude == nil {
+		return nil, nil
+	}
+	lat, err := toFloat(latitude)
+	if err != nil {
+		return nil, err
+	}
+	lon, err := toFloat(longitude)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"lat": lat, "lon": lon}, nil
+}
+
 // parseRecord convertit un enregistrement en document indexable, ou (nil, nil)
 // si la station n'a pas d'identifiant.
 func parseRecord(record Record) (es.Document, error) {
-	var stationID string
-	if id := record["id"]; truthy(id) {
-		stationID = strings.TrimSpace(pyText(id))
-	}
+	stationID := recordStationID(record)
 	if stationID == "" {
 		return nil, nil
 	}
 
-	var location any
-	if geom, ok := record["geom"].(map[string]any); ok {
-		latitude, longitude := geom["lat"], geom["lon"]
-		if latitude != nil && longitude != nil {
-			lat, err := toFloat(latitude)
-			if err != nil {
-				return nil, err
-			}
-			lon, err := toFloat(longitude)
-			if err != nil {
-				return nil, err
-			}
-			location = map[string]any{"lat": lat, "lon": lon}
-		}
+	location, err := parseLocation(record)
+	if err != nil {
+		return nil, err
 	}
 
 	prices := map[string]float64{}
@@ -221,9 +237,16 @@ func ParseRecords(records []Record) []es.Document {
 	return documents
 }
 
-// Ingest télécharge, parse et indexe les stations depuis `sourceURL`.
+// Ingest télécharge, parse et indexe les stations depuis `sourceURL`, puis
+// ajoute les nouveaux relevés de prix à l'historique `historyStream` (vide :
+// pas d'historique).
+//
+// Les compteurs et l'erreur retournés concernent l'index des stations, qui
+// sert l'API. Un échec de l'historique est journalisé sans faire échouer
+// l'ingestion : les relevés manqués seront rattrapés à la suivante tant que la
+// station n'a pas republié de prix entre-temps.
 func Ingest(
-	ctx context.Context, client *elasticsearch.Client, indexAlias, sourceURL string,
+	ctx context.Context, client *elasticsearch.Client, indexAlias, historyStream, sourceURL string,
 ) (success, failed int, err error) {
 	records, err := FetchRecords(ctx, sourceURL)
 	if err != nil {
@@ -232,8 +255,19 @@ func Ingest(
 	documents := ParseRecords(records)
 
 	success, failed, err = es.BulkIndex(ctx, client, indexAlias, slices.Values(documents))
-	if err == nil {
-		slog.Info("stations_ingestion_completed", "success", success, "errors", failed)
+	if err != nil {
+		return success, failed, err
 	}
-	return success, failed, err
+	slog.Info("stations_ingestion_completed", "success", success, "errors", failed)
+
+	if historyStream != "" {
+		created, known, historyFailed, historyErr := RecordHistory(ctx, client, historyStream, ParseHistory(records))
+		if historyErr != nil {
+			slog.Error("price_history_failed", "data_stream", historyStream, "error", historyErr.Error())
+		} else {
+			slog.Info("price_history_recorded",
+				"data_stream", historyStream, "created", created, "known", known, "errors", historyFailed)
+		}
+	}
+	return success, failed, nil
 }

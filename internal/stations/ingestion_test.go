@@ -187,7 +187,7 @@ func TestIngestFetchesParsesAndBulkIndexes(t *testing.T) {
 		})
 	})
 
-	success, failed, err := Ingest(t.Context(), client, "openhexa-stations", source.URL)
+	success, failed, err := Ingest(t.Context(), client, "openhexa-stations", "", source.URL)
 
 	if err != nil || success != 1 || failed != 0 {
 		t.Fatalf("success=%d failed=%d err=%v", success, failed, err)
@@ -208,7 +208,7 @@ func TestIngestReportsSourceFailures(t *testing.T) {
 	defer source.Close()
 	client, recorder := estest.New(t, func(w http.ResponseWriter, r *http.Request) {})
 
-	_, _, err := Ingest(t.Context(), client, "openhexa-stations", source.URL)
+	_, _, err := Ingest(t.Context(), client, "openhexa-stations", "", source.URL)
 
 	if err == nil {
 		t.Error("une source en 503 doit produire une erreur")
