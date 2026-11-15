@@ -1,0 +1,42 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  # go.mod référence core par `replace => ../core` (core n'est pas encore publié
+  # comme module versionné) : core est donc récupéré à côté de ce repo.
+  # Une fois core tagué, supprimer le `replace` de go.mod, cette variable et le
+  # checkout de core ci-dessous.
+  CORE_REF: main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: essence-back
+      - uses: actions/checkout@v4
+        with:
+          repository: OpenHexa-fr/core
+          ref: ${{ env.CORE_REF }}
+          path: core
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: essence-back/go.mod
+          cache-dependency-path: essence-back/go.sum
+      - name: Format
+        working-directory: essence-back
+        run: test -z "$(gofmt -l .)"
+      - name: Vet
+        working-directory: essence-back
+        run: go vet ./...
+      - name: Tests
+        working-directory: essence-back
+        run: go test -race ./...
